@@ -87,40 +87,6 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      # ffmpeg is a runtime tool for the media services (audio premaster, uploads,
-      # frame QA); the ubuntu-latest image does not ship it. Measured 2026-11-17 on
-      # w2v_orchestrator's second public run: 26 tests failed with "ffmpeg not found
-      # on PATH" while the same suite was green on a dev box that has it installed.
-      - name: install system dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends ffmpeg
-
-      # Rendering services exercise Playwright; the runners ship no browsers.
-      # Conditional so repos that do not depend on Playwright pay nothing.
-      # Measured 2026-11-18 on html_render_service: 30 failures, all
-      # "Executable doesn't exist … playwright install".
-      - name: install Playwright browsers (only when the repo uses Playwright)
-        run: |
-          if uv run python -c 'import playwright' >/dev/null 2>&1; then
-            uv run playwright install --with-deps chromium
-          fi
-
-      - name: start Postgres 18
-        run: |
-          set -euo pipefail
-          docker run -d --rm --name ci-pg \
-            -e POSTGRES_PASSWORD=postgres \
-            --shm-size=1g \
-            -p 127.0.0.1:5432:5432 \
-            postgres:18 -c fsync=off -c max_connections=300
-          for _ in $(seq 1 60); do
-            docker exec ci-pg pg_isready -h 127.0.0.1 -U postgres >/dev/null 2>&1 && break
-            sleep 1
-          done
-          docker exec ci-pg pg_isready -h 127.0.0.1 -U postgres
-          docker exec ci-pg psql -U postgres -q -c 'CREATE DATABASE app_ci'
-
       - uses: astral-sh/setup-uv@v6
         with:
           version: ${{ env.UV_VERSION }}
